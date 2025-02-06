@@ -5,7 +5,8 @@
 package frc.robot.subsystems;
 
 import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.util.ReplanningConfig;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPLTVController;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -14,6 +15,7 @@ import edu.wpi.first.math.kinematics.DifferentialDriveKinematics;
 import edu.wpi.first.math.kinematics.DifferentialDriveOdometry;
 import edu.wpi.first.math.kinematics.DifferentialDriveWheelPositions;
 import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
@@ -43,6 +45,8 @@ public class DriveSubsystem extends SubsystemBase {
   // Set up the differential drive controller
   private final DifferentialDrive m_diffDrive = new DifferentialDrive(m_leftMotor::set, m_rightMotor::set);
 
+  RobotConfig config;
+
   private final DifferentialDriveKinematics m_kinematics = new DifferentialDriveKinematics(
       CowboyUtils.inchesToMeters(DriveTrainConstants.TRACK_WIDTH_INCH));
 
@@ -67,10 +71,27 @@ public class DriveSubsystem extends SubsystemBase {
         CowboyUtils.inchesToMeters(getLeftDistanceInch()),
         CowboyUtils.inchesToMeters(getRightDistanceInch()));
 
-    AutoBuilder.configureRamsete(this::getRobotPose, this::resetOdometry, this::getChassisSpeeds,
-        this::driveChassisSpeeds, 1, .6,
-        new ReplanningConfig(false, false),
-        () -> false, this);
+    try {
+      config = RobotConfig.fromGUISettings();
+    } catch (Exception e) {
+      // Handle exception as needed
+      e.printStackTrace();
+    }
+
+    AutoBuilder.configure(this::getRobotPose, this::resetOdometry, this::getChassisSpeeds,
+        (speeds, feedforwards) -> driveChassisSpeeds(speeds),
+        new PPLTVController(0.02), config, () -> {
+          // Boolean supplier that controls when the path will be mirrored for the red
+          // alliance
+          // This will flip the path being followed to the red side of the field.
+          // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
+
+          var alliance = DriverStation.getAlliance();
+          if (alliance.isPresent()) {
+            return alliance.get() == DriverStation.Alliance.Red;
+          }
+          return false;
+        }, this);
 
   }
 
